@@ -1,2 +1,4 @@
 # TekWFM2
- Parser for tektronix WFM v.2 binary files
+Parser for Tektronix WFM v.2 binary files
+
+Module reads volts vs. time records (including fastframes) from little-endian version 2 WFM files
