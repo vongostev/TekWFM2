@@ -12,7 +12,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="tekwfm2",
-    version="0.1.0",
+    version="0.1.1",
     author="Pavel Gostev",
     author_email="gostev.pavel@physics.msu.ru",
     description="Parser for Tektronix WFM v.2 binary files",
@@ -27,7 +27,7 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     include_package_data=True,
-    install_requires = [
-          'numpy'
-          ],
+    install_requires=[
+        'numpy'
+    ],
 )

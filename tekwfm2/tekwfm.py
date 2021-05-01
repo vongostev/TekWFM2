@@ -20,7 +20,6 @@ Tested on Python 3.6+
 """
 
 
-
 import struct
 import numpy as np
 
@@ -30,28 +29,30 @@ class WfmReadError(Exception):
     pass
 
 
-def read_wfm(target):
-    """return sample data from target WFM file"""
-    with open(target, 'rb') as f:
+def read_wfm(path):
+    """return sample data from path WFM file"""
+    with open(path, 'rb') as f:
         hbytes = f.read(838)
-        meta = decode_header(hbytes)
+        meta = decode_header(path, hbytes)
         # file signature checks
         if meta['byte_order'] != 0x0f0f:
-            raise WfmReadError('big-endian not supported in this version')
+            raise WfmReadError(
+                path, 'big-endian not supported in this version')
         if meta['version'] != b':WFM#002':
-            raise WfmReadError('only version 2 wfms supported in this version')
+            raise WfmReadError(
+                path, 'only version 2 wfms supported in this version')
         if meta['imp_dim_count'] != 1:
-            raise WfmReadError('imp dim count not 1')
+            raise WfmReadError(path, 'imp dim count not 1')
         if meta['exp_dim_count'] != 1:
-            raise WfmReadError('exp dim count not 1')
+            raise WfmReadError(path, 'exp dim count not 1')
         if meta['record_type'] != 2:
-            raise WfmReadError('not WFMDATA_VECTOR')
+            raise WfmReadError(path, 'not WFMDATA_VECTOR')
         # if meta['exp_dim_1_type'] != 0:
-        #    raise WfmReadError('not EXPLICIT_SAMPLE')
+        #    raise WfmReadError(path, 'not EXPLICIT_SAMPLE')
         if meta['time_base_1'] != 0:
-            raise WfmReadError('not BASE_TIME')
+            raise WfmReadError(path, 'not BASE_TIME')
         if meta['fastframe']:
-            raise WfmReadError('Fast Frames are not supported')
+            raise WfmReadError(path, 'Fast Frames are not supported')
         # read curve block
         bin_wave = np.memmap(filename=f,
                              dtype=meta['dformat'],
@@ -64,11 +65,11 @@ def read_wfm(target):
     return scaled_array, meta
 
 
-def decode_header(header_bytes):
+def decode_header(path, header_bytes):
     """returns a dict of wfm metadata"""
     wfm_info = {}
     if len(header_bytes) != 838:
-        raise WfmReadError('wfm header bytes not 838')
+        raise WfmReadError(path, 'wfm header bytes not 838')
     wfm_info['byte_order'] = struct.unpack_from('H', header_bytes, offset=0)[0]
     wfm_info['version'] = struct.unpack_from('8s', header_bytes, offset=2)[0]
     wfm_info['imp_dim_count'] = struct.unpack_from(
@@ -119,7 +120,8 @@ def decode_header(header_bytes):
     elif code == 4 and bps == 4:
         dformat = 'single'
     else:
-        raise WfmReadError('data type code or bytes-per-sample not understood')
+        raise WfmReadError(
+            path, 'data type code or bytes-per-sample not understood')
     wfm_info['dformat'] = dformat
     wfm_info['dlen'] = dsize // bps
     return wfm_info
@@ -143,10 +145,10 @@ class ScopeData:
             self.y, meta = read_wfm(path)
         except Exception as E:
             raise WfmReadError(path, E)
-        
+
         for k, v in meta.items():
             setattr(self, k, v)
-            
+
         samples = len(self.y)
         self.tstop = samples * self.tscale + self.tstart
         self.x = np.linspace(self.tstart, self.tstop, samples, endpoint=False)
