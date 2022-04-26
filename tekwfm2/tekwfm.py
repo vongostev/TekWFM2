@@ -34,22 +34,8 @@ def read_wfm(path):
     with open(path, 'rb') as f:
         hbytes = f.read(838)
         meta = decode_header(path, hbytes)
+
         # file signature checks
-        if meta['byte_order'] == 0x0f0f:
-            endianness = "<"
-        elif meta['byte_order'] == 0xf0f0:
-            endianness = ">"
-        else:
-            raise WfmReadError(path, 'endianness could not be parsed')
-
-        if meta['version']==b':WFM#001':
-            v1_offset = 2
-        elif meta['version']==b':WFM#002':
-            v1_offset = 0
-        else:
-            raise WfmReadError(
-                path, 'only version 1 or 2 wfms supported in this version')
-
         if meta['imp_dim_count'] != 1:
             raise WfmReadError(path, 'imp dim count not 1')
         if meta['exp_dim_count'] != 1:
@@ -80,7 +66,24 @@ def decode_header(path, header_bytes):
     if len(header_bytes) != 838:
         raise WfmReadError(path, 'wfm header bytes not 838')
     wfm_info['byte_order'] = struct.unpack_from('H', header_bytes, offset=0)[0]
+
+    if wfm_info['byte_order'] == 0x0f0f:
+        endianness = "<"
+    elif wfm_info['byte_order'] == 0xf0f0:
+        endianness = ">"
+    else:
+        raise WfmReadError(path, 'endianness could not be parsed')
+
     wfm_info['version'] = struct.unpack_from('8s', header_bytes, offset=2)[0]
+
+    if wfm_info['version']==b':WFM#001':
+        v1_offset = 2
+    elif wfm_info['version']==b':WFM#002':
+        v1_offset = 0
+    else:
+        raise WfmReadError(
+             path, 'only version 1 or 2 wfms supported in this version')
+
     wfm_info['imp_dim_count'] = struct.unpack_from(
         endianness+'I', header_bytes, offset=114)[0]
     wfm_info['exp_dim_count'] = struct.unpack_from(
