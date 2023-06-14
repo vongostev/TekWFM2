@@ -6,3 +6,9 @@ ScopeData interface is unified with [LeCroyParser](https://github.com/bennomeier
 
 Module reads volts vs. time records (including fastframes) from little- and big-endian version 1 & 2 WFM files
 
+
+### Note
+I have not tested for version 1 and 2 WFM files because I have only version 3 files measured by MSO6 series. 
+
+Added by ykm11
+
