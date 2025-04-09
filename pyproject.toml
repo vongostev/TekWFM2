@@ -1,0 +1,21 @@
+
+[project]
+name = "tekwfm2"
+version = "0.2.0"
+description = "Parser for Tektronix WFM v.1 & v.2 binary files"
+readme = "README.md"
+authors = [{ name = "Pavel Gostev", email = "gostev.pavel@physics.msu.ru" }]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+requires-python = ">=3.6"
+dependencies = ["numpy>=1.20,<2.0"]
+
+[project.urls]
+Homepage = "https://github.com/vongostev/tekwfm2"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

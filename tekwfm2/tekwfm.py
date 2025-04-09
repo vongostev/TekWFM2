@@ -19,144 +19,175 @@ Tested on Python 3.6+
 
 """
 
+from struct import unpack_from as unpackf
+from typing import Tuple
 
-import struct
 import numpy as np
+
+from tekwfm2.ifaces import IScopeData, WfmMeta
 
 
 class WfmReadError(Exception):
-    """error for unexpected things"""
     pass
 
 
-def read_wfm(path):
-    """return sample data from path WFM file"""
-    with open(path, 'rb') as f:
+def read_wfm(path: str) -> Tuple[np.ndarray, WfmMeta]:
+    """
+    Reads a WFM file and returns the waveform data and metadata.
+
+    Parameters
+    ----------
+    path : str
+        Path to the WFM file.
+
+    Returns
+    -------
+    Tuple[np.ndarray, WfmMeta]
+        A tuple containing the scaled waveform data as a numpy array and the
+        metadata as a WfmMeta object.
+
+    Raises
+    ------
+    WfmReadError
+        If the file does not conform to the expected WFM format or if any of the
+        metadata checks fail.
+    """
+    with open(path, "rb") as f:
         hbytes = f.read(838)
         meta = decode_header(path, hbytes)
 
         # file signature checks
-        if meta['imp_dim_count'] != 1:
-            raise WfmReadError(path, 'imp dim count not 1')
-        if meta['exp_dim_count'] != 1:
-            raise WfmReadError(path, 'exp dim count not 1')
-        if meta['record_type'] != 2:
-            raise WfmReadError(path, 'not WFMDATA_VECTOR')
+        if meta["imp_dim_count"] != 1:
+            raise WfmReadError(path, "imp dim count not 1")
+        if meta["exp_dim_count"] != 1:
+            raise WfmReadError(path, "exp dim count not 1")
+        if meta["record_type"] != 2:
+            raise WfmReadError(path, "not WFMDATA_VECTOR")
         # if meta['exp_dim_1_type'] != 0:
         #    raise WfmReadError(path, 'not EXPLICIT_SAMPLE')
-        if meta['time_base_1'] != 0:
-            raise WfmReadError(path, 'not BASE_TIME')
-        if meta['fastframe']:
-            raise WfmReadError(path, 'Fast Frames are not supported')
+        if meta["time_base_1"] != 0:
+            raise WfmReadError(path, "not BASE_TIME")
+        if meta["fastframe"]:
+            raise WfmReadError(path, "Fast Frames are not supported")
         # read curve block
-        bin_wave = np.memmap(filename=f,
-                             dtype=meta['dformat'],
-                             mode='r',
-                             offset=meta['curve_offset'],
-                             shape=(meta['dlen']),
-                             order='F')
+        bin_wave = np.memmap(
+            filename=f,
+            dtype=meta["dformat"],
+            mode="r",
+            offset=meta["curve_offset"],
+            shape=(meta["dlen"]),
+            order="F",
+        )
 
-    scaled_array = bin_wave * meta['vscale'] + meta['voffset']
+    scaled_array = bin_wave * meta["vscale"] + meta["voffset"]
     return scaled_array, meta
 
 
-def decode_header(path, header_bytes):
-    """returns a dict of wfm metadata"""
-    wfm_info = {}
-    if len(header_bytes) != 838:
-        raise WfmReadError(path, 'wfm header bytes not 838')
-    wfm_info['byte_order'] = struct.unpack_from('H', header_bytes, offset=0)[0]
+def decode_header(path: str, header: bytes) -> WfmMeta:
+    """Decode WFM file header to obtain metadata
 
-    if wfm_info['byte_order'] == 0x0f0f:
-        endianness = "<"
-    elif wfm_info['byte_order'] == 0xf0f0:
-        endianness = ">"
+    Parameters
+    ----------
+    path : str
+        Path to WFM file.
+    header : bytes
+        Header bytes of the file.
+
+    Returns
+    -------
+    WfmMeta
+        Metadata of the WFM file.
+    """
+    meta: WfmMeta = {}
+    if len(header) != 838:
+        raise WfmReadError(path, "wfm header bytes not 838")
+    meta["byte_order"] = unpackf("H", header, offset=0)[0]
+    if meta["byte_order"] == 0x0F0F:
+        endianness = "<"  # little-endian
+    elif meta["byte_order"] == 0xF0F0:
+        endianness = ">"  # big-endian
     else:
-        raise WfmReadError(path, 'endianness could not be parsed')
+        raise WfmReadError(path, "endianness could not be parsed")
 
-    wfm_info['version'] = struct.unpack_from('8s', header_bytes, offset=2)[0]
-
-    if wfm_info['version']==b':WFM#001':
+    meta["version"] = unpackf("8s", header, offset=2)[0]
+    if meta["version"] == b":WFM#001":
         v1_offset = 2
-    elif wfm_info['version']==b':WFM#002':
+    elif meta["version"] == b":WFM#002":
         v1_offset = 0
     else:
-        raise WfmReadError(
-             path, 'only version 1 or 2 wfms supported in this version')
+        raise WfmReadError(path, "only version 1 or 2 wfms supported in this version")
 
-    wfm_info['imp_dim_count'] = struct.unpack_from(
-        endianness+'I', header_bytes, offset=114)[0]
-    wfm_info['exp_dim_count'] = struct.unpack_from(
-        endianness+'I', header_bytes, offset=118)[0]
-    wfm_info['record_type'] = struct.unpack_from(
-        endianness+'I', header_bytes, offset=122)[0]
-    wfm_info['exp_dim_1_type'] = struct.unpack_from(
-        endianness+'I', header_bytes, offset=244-v1_offset)[0]
-    wfm_info['time_base_1'] = struct.unpack_from(
-        endianness+'I', header_bytes, offset=768-v1_offset)[0]
-    wfm_info['fastframe'] = struct.unpack_from(endianness+'I', header_bytes, offset=78)[0]
-    wfm_info['Frames'] = struct.unpack_from(
-        endianness+'I', header_bytes, offset=72)[0] + 1
-    wfm_info['summary_frame'] = struct.unpack_from(
-        endianness+'h', header_bytes, offset=154)[0]
-    wfm_info['curve_offset'] = struct.unpack_from(endianness+'i', header_bytes, offset=16)[
-        0]  # 838 + ((frames - 1) * 54)
+    int_format = endianness + "i"
+    uint_format = endianness + "I"
+    byte_format = endianness + "b"
+    short_format = endianness + "h"
+    double_format = endianness + "d"
+
+    meta["imp_dim_count"] = unpackf(uint_format, header, offset=114)[0]
+    meta["exp_dim_count"] = unpackf(uint_format, header, offset=118)[0]
+    meta["record_type"] = unpackf(uint_format, header, offset=122)[0]
+    meta["exp_dim_1_type"] = unpackf(uint_format, header, offset=244 - v1_offset)[0]
+    meta["time_base_1"] = unpackf(uint_format, header, offset=768 - v1_offset)[0]
+    meta["fastframe"] = unpackf(uint_format, header, offset=78)[0]
+    meta["Frames"] = unpackf(uint_format, header, offset=72)[0] + 1
+    meta["summary_frame"] = unpackf(short_format, header, offset=154)[0]
+    meta["curve_offset"] = unpackf(int_format, header, offset=16)[0]
     # scaling factors
-    wfm_info['vscale'] = struct.unpack_from(endianness+'d', header_bytes, offset=168-v1_offset)[0]
-    wfm_info['voffset'] = struct.unpack_from(endianness+'d', header_bytes, offset=176-v1_offset)[0]
-    #wfm_info['tstart'] = struct.unpack_from('d', header_bytes, offset=496)[0]
-    wfm_info['tstart'] = struct.unpack_from(endianness+'d', header_bytes, offset=488-v1_offset)[0]
-    wfm_info['tscale'] = struct.unpack_from(endianness+'d', header_bytes, offset=536-v1_offset)[0]
+    meta["vscale"] = unpackf(double_format, header, offset=168 - v1_offset)[0]
+    meta["voffset"] = unpackf(double_format, header, offset=176 - v1_offset)[0]
+    # meta['tstart'] = unpackf('d', header, offset=496)[0]
+    meta["tstart"] = unpackf(double_format, header, offset=488 - v1_offset)[0]
+    meta["tscale"] = unpackf(double_format, header, offset=536 - v1_offset)[0]
     # trigger detail
-    wfm_info['tfrac'] = struct.unpack_from(endianness+'d', header_bytes, offset=788-v1_offset)[
-        0]  # frame index 0
-    wfm_info['tdatefrac'] = struct.unpack_from(
-        endianness+'d', header_bytes, offset=796)[0]  # frame index 0
-    wfm_info['tdate'] = struct.unpack_from(endianness+'I', header_bytes, offset=804-v1_offset)[
-        0]  # frame index 0
-
+    meta["tfrac"] = unpackf(double_format, header, offset=788 - v1_offset)[0]
+    meta["tdatefrac"] = unpackf(double_format, header, offset=796)[0]
+    meta["tdate"] = unpackf(uint_format, header, offset=804 - v1_offset)[0]
     # data offsets
     # frames are same size, only first frame offsets are used
-    dsize = struct.unpack_from(endianness+'I', header_bytes, offset=818-v1_offset)[0]
-    wfm_info['dsize'] = dsize
+    dsize = unpackf(uint_format, header, offset=818 - v1_offset)[0]
+    meta["dsize"] = dsize
     # sample data type detection
-    code = struct.unpack_from(endianness+'i', header_bytes, offset=240-v1_offset)[0]
-    wfm_info['code'] = code
-    bps = struct.unpack_from(endianness+'b', header_bytes, offset=15)[
-        0]  # bytes-per-sample
-    wfm_info['bps'] = bps
+    code = unpackf(int_format, header, offset=240 - v1_offset)[0]
+    meta["code"] = code
+    bps = unpackf(byte_format, header, offset=15)[0]  # bytes-per-sample
+    meta["bps"] = bps
     if code == 7 and bps == 1:
-        dformat = endianness+'i1'
+        dformat = endianness + "i1"
     elif code == 0 and bps == 2:
-        dformat = endianness+'i2'
+        dformat = endianness + "i2"
     elif code == 4 and bps == 4:
-        dformat = endianness+'f32'
+        dformat = endianness + "f32"
     else:
-        raise WfmReadError(
-            path, 'data type code or bytes-per-sample not understood')
-    wfm_info['dformat'] = dformat
-    wfm_info['dlen'] = dsize // bps
-    return wfm_info
+        raise WfmReadError(path, "data type code or bytes-per-sample not understood")
+    meta["dformat"] = dformat
+    meta["dlen"] = dsize // bps
+    return meta
 
 
-class ScopeData:
+class ScopeData(IScopeData):
+    """
+    Class for WFM oscillogram data from old Tek Oscilloscopes
+    5, 6 Series MSO
+    """
 
-    def __init__(self, path):
+    def __init__(self, path: str) -> None:
         """
-        Class for WFM oscillogram data from old Tek Oscilloscopes
-        5 Series MSO
-        6 Series MSO
+        Initialize ScopeData object.
 
         Parameters
         ----------
         path : str
-            Full or relative path to oscillogram WFM file.
+            Path to WFM file.
 
+        Notes
+        -----
+        Reads WFM file and populates object with data and metadata.
+        If file cannot be read, raises WfmReadError.
         """
         try:
             self.y, meta = read_wfm(path)
-        except Exception as E:
-            raise WfmReadError(path, E)
+        except Exception as exc:
+            raise WfmReadError(path, exc)
 
         for k, v in meta.items():
             setattr(self, k, v)
