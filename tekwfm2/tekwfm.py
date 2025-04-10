@@ -15,7 +15,7 @@ https://download.tek.com/manual/Waveform-File-Format-Manual-077022011.pdf
 Based on
 https://forum.tek.com/viewtopic.php?t=141081
 
-Tested on Python 3.6+
+Tested on Python 3.9+
 
 """
 
@@ -99,15 +99,18 @@ def decode_header(path: str, header: bytes) -> WfmMeta:
         Metadata of the WFM file.
     """
     meta: WfmMeta = {}
+    print(header[:10].hex())
     if len(header) != 838:
-        raise WfmReadError(path, "wfm header bytes not 838")
+        raise WfmReadError(path, "WFM header bytes not 838")
     meta["byte_order"] = unpackf("H", header, offset=0)[0]
     if meta["byte_order"] == 0x0F0F:
         endianness = "<"  # little-endian
     elif meta["byte_order"] == 0xF0F0:
         endianness = ">"  # big-endian
     else:
-        raise WfmReadError(path, "endianness could not be parsed")
+        raise WfmReadError(
+            path, "Endianness could not be parsed from {:4X}".format(meta["byte_order"])
+        )
 
     meta["version"] = unpackf("8s", header, offset=2)[0]
     if meta["version"] == b":WFM#001":
@@ -115,7 +118,7 @@ def decode_header(path: str, header: bytes) -> WfmMeta:
     elif meta["version"] == b":WFM#002":
         v1_offset = 0
     else:
-        raise WfmReadError(path, "only version 1 or 2 wfms supported in this version")
+        raise WfmReadError(path, "Only version 1 or 2 of WFM supported in this version")
 
     int_format = endianness + "i"
     uint_format = endianness + "I"
@@ -158,7 +161,9 @@ def decode_header(path: str, header: bytes) -> WfmMeta:
     elif code == 4 and bps == 4:
         dformat = endianness + "f32"
     else:
-        raise WfmReadError(path, "data type code or bytes-per-sample not understood")
+        raise WfmReadError(
+            path, f"Data type code {code} or bytes-per-sample {bps} is not supported"
+        )
     meta["dformat"] = dformat
     meta["dlen"] = dsize // bps
     return meta
@@ -166,8 +171,7 @@ def decode_header(path: str, header: bytes) -> WfmMeta:
 
 class ScopeData(IScopeData):
     """
-    Class for WFM oscillogram data from old Tek Oscilloscopes
-    5, 6 Series MSO
+    Class for WFM oscillogram data from 5 and 6 Series MSO Tek Oscilloscopes
     """
 
     def __init__(self, path: str) -> None:
@@ -184,11 +188,7 @@ class ScopeData(IScopeData):
         Reads WFM file and populates object with data and metadata.
         If file cannot be read, raises WfmReadError.
         """
-        try:
-            self.y, meta = read_wfm(path)
-        except Exception as exc:
-            raise WfmReadError(path, exc)
-
+        self.y, meta = read_wfm(path)
         for k, v in meta.items():
             setattr(self, k, v)
 

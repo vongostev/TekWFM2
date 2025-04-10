@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Literal, Protocol, TypedDict
 
 from numpy import float32, int8, int16
